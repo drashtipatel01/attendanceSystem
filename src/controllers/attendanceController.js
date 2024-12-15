@@ -1,6 +1,5 @@
 const PunchRecord = require('../models/PunchRecord');
 
-// Get user attendance
 const getAttendance = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -11,7 +10,6 @@ const getAttendance = async (req, res) => {
     }
 };
 
-// Record punch-in or punch-out
 const recordPunch = async (req, res) => {
     try {
         const { userId, punchIn, punchOut } = req.body;

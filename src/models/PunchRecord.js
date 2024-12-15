@@ -16,14 +16,6 @@ const punchRecordSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    // punchIn: { type: Date, required: true },
-    // punchOut: { type: Date },
-    // logs: [
-    //     {
-    //         type: { type: String, enum: ['punch-in', 'punch-out', 'break-in', 'break-out'] },
-    //         timestamp: Date,
-    //     },
-    // ],
 });
 
 module.exports = mongoose.model('PunchRecord', punchRecordSchema);
