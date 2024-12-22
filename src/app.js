@@ -14,6 +14,8 @@ const app = express();
 connectDB();
 
 app.use(cors());
+app.use(cors({ methods: ['GET', 'POST', 'PUT', 'DELETE'] }));
+
 app.use(bodyParser.json());
 
 app.use('/api', authRoutes);
