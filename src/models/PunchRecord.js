@@ -2,16 +2,17 @@ const mongoose = require('mongoose');
 
 const punchRecordSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    timestamp: {
-        type: Date,
-        required: true,
-        default: Date.now
-    },
-    type: {
-        type: String,
-        enum: ['in', 'out'],
-        required: true
-    },
+    date: { type: Date, required: true },
+    punchIn: { type: Date },
+    punchOut: { type: Date },
+    breaks: [
+        {
+            breakIn: Date,
+            breakOut: Date,
+        }
+    ],
+    totalWorkHours: { type: Number, default: 0 },
+    isLessHours: { type: Boolean, default: false }, 
     createdAt: {
         type: Date,
         default: Date.now
