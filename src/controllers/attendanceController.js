@@ -1,5 +1,6 @@
 const PunchRecord = require('../models/PunchRecord');
 const jwt = require('jsonwebtoken');
+const { calculateWorkHours, getRequiredHours } = require('../utils');
 
 const getAttendance = async (req, res) => {
     try {
@@ -11,132 +12,64 @@ const getAttendance = async (req, res) => {
     }
 };
 
-// const recordPunch = async (req, res) => {
-//     try {
-//         const { userId, punchIn, punchOut } = req.body;
-//         const record = new PunchRecord({ userId, punchIn, punchOut });
-//         await record.save();
-//         res.status(201).json(record);
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// };
-
-
-const recordPunch = async (req, res) => {
+const recordAction = async (req, res) => {
     try {
-        // Extract token from header
         const token = req.headers.authorization?.split(' ')[1];
-
         if (!token) {
-            return res.status(401).json({ error: 'No token provided. Unauthorized access.' });
+            return res.status(401).json({ error: 'Unauthorized access.' });
         }
-
-        // Verify token and extract userId
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (error) {
-            return res.status(401).json({ error: 'Invalid or expired token.' });
-        }
-
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = decoded.userId;
-
-        // Extract type and createdAt from the request body
-        const { type, createdAt } = req.body;
-
-        // Validate the type field
-        if (!['in', 'out'].includes(type)) {
-            return res.status(400).json({ error: "Invalid type. Must be 'in' or 'out'." });
+        const { type } = req.body;
+        const validTypes = ['punchIn', 'punchOut', 'breakIn', 'breakOut'];
+        if (!validTypes.includes(type)) {
+            return res.status(400).json({ error: 'Invalid action type.' });
+        }
+        const now = new Date();
+        const today = new Date(now.toISOString().split('T')[0]);
+        let record = await PunchRecord.findOne({ userId, date: today });
+        if (!record && type === 'punchIn') {
+            record = new PunchRecord({ userId, date: today });
         }
 
-        // Create a new punch record
-        const record = new PunchRecord({
-            userId,
-            type,
-            createdAt: createdAt || Date.now(), // Use provided date or default to now
-        });
-
-        const message = type === 'in'
-            ? 'Punched In successfully'
-            : 'Punched Out successfully';
+        if (type === 'punchIn') {
+            if (!record.punchIn) {
+                record.punchIn = now;
+            } else {
+                return res.status(400).json({ error: 'Already punched in today.' });
+            }
+        } else if (type === 'punchOut') {
+            if (record && record.punchIn && !record.punchOut) {
+                record.punchOut = now;
+                const workHours = calculateWorkHours(record.punchIn, record.punchOut, record.breaks);
+                record.totalWorkHours = workHours.total;
+                record.isLessHours = workHours.total < (await getRequiredHours());
+            } else {
+                return res.status(400).json({ error: 'Invalid punch-out action.' });
+            }
+        } else if (type === 'breakIn') {
+            if (record) {
+                record.breaks.push({ breakIn: now });
+            } else {
+                return res.status(400).json({ error: 'Punch in before starting a break.' });
+            }
+        } else if (type === 'breakOut') {
+            if (record && record.breaks.length > 0) {
+                const lastBreak = record.breaks[record.breaks.length - 1];
+                if (lastBreak && !lastBreak.breakOut) {
+                    lastBreak.breakOut = now;
+                } else {
+                    return res.status(400).json({ error: 'Invalid break-out action.' });
+                }
+            } else {
+                return res.status(400).json({ error: 'No ongoing break to end.' });
+            }
+        }
         await record.save();
-        // res.status(201).json(record);
-        res.status(201).json({
-            message: message
-        });
+        res.status(201).json({ message: `Action ${type} recorded successfully.` });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
-const recordAttendance = async (req, res) => {
-    try {
-        // Extract token from header
-        const token = req.headers.authorization?.split(' ')[1];
-
-        if (!token) {
-            return res.status(401).json({ error: 'No token provided. Unauthorized access.' });
-        }
-
-        // Verify token and extract userId
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (error) {
-            return res.status(401).json({ error: 'Invalid or expired token.' });
-        }
-
-        const userId = decoded.userId;
-
-        // Extract type and createdAt from the request body
-        const { type, createdAt } = req.body;
-
-        // Validate the type field
-        if (!['in', 'out'].includes(type)) {
-            return res.status(400).json({ error: "Invalid type. Must be 'in' or 'out'." });
-        }
-
-        // Create a new punch record
-        const record = new PunchRecord({
-            userId,
-            type,
-            createdAt: createdAt || Date.now(), // Use provided date or default to now
-        });
-
-        const message = type === 'in'
-            ? 'Punched In successfully'
-            : 'Punched Out successfully';
-        await record.save();
-        // res.status(201).json(record);
-        res.status(201).json({
-            message: message
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-// const recordPunch = async (req, res) => {
-//     try {
-//         const { userId, type, createdAt } = req.body;
-
-//         // Validate type
-//         if (!['in', 'out'].includes(type)) {
-//             return res.status(400).json({ error: "Invalid type. Must be 'in' or 'out'." });
-//         }
-
-//         // Create a new punch record
-//         const record = new PunchRecord({
-//             userId,
-//             type,
-//             createdAt: createdAt || Date.now(), // Use provided date or default to now
-//         });
-
-//         await record.save();
-//         res.status(201).json(record);
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// };
-
-module.exports = { getAttendance, recordPunch, recordAttendance };
+module.exports = { getAttendance, recordAction };
