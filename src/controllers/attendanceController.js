@@ -72,4 +72,153 @@ const recordAction = async (req, res) => {
     }
 };
 
-module.exports = { getAttendance, recordAction };
+const getUserStatus = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const today = new Date(new Date().toISOString().split('T')[0]);
+        const record = await PunchRecord.findOne({ userId, date: today });
+
+        if (!record) {
+            return res.status(200).json({ status: null });
+        }
+
+        let status = null;
+        if (record.punchIn && !record.punchOut) {
+            status = 'punchedIn';
+        } else if (record.punchOut) {
+            status = 'punchedOut';
+        }
+
+        // Check for breaks
+        if (record.breaks.length > 0) {
+            const lastBreak = record.breaks[record.breaks.length - 1];
+            if (lastBreak.breakIn && !lastBreak.breakOut) {
+                status = 'onBreak';
+            }
+        }
+
+        res.status(200).json({ status });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getAttendanceRecord = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { filter } = req.query; // 'daily', 'weekly', 'monthly'
+        const today = new Date(new Date().toISOString().split('T')[0]);
+
+        let startDate, endDate;
+        switch (filter) {
+            case 'daily':
+                startDate = today;
+                endDate = new Date(today);
+                endDate.setDate(endDate.getDate() + 1);
+                break;
+            case 'weekly':
+                startDate = new Date(today);
+                startDate.setDate(startDate.getDate() - startDate.getDay()); // Start of the week (Sunday)
+                endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + 7);
+                break;
+            case 'monthly':
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1); // Start of the month
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 1); // Start of next month
+                break;
+            default:
+                return res.status(400).json({ error: 'Invalid filter. Use daily, weekly, or monthly.' });
+        }
+
+        const records = await PunchRecord.find({
+            userId,
+            date: { $gte: startDate, $lt: endDate },
+        });
+
+        res.status(200).json({ records });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getReport = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { filter } = req.query; // 'daily', 'weekly', 'monthly'
+        const today = new Date(new Date().toISOString().split('T')[0]);
+
+        let startDate, endDate;
+        switch (filter) {
+            case 'daily':
+                startDate = today;
+                endDate = new Date(today);
+                endDate.setDate(endDate.getDate() + 1);
+                break;
+            case 'weekly':
+                startDate = new Date(today);
+                startDate.setDate(startDate.getDate() - startDate.getDay()); // Start of the week (Sunday)
+                endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + 7);
+                break;
+            case 'monthly':
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1); // Start of the month
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 1); // Start of next month
+                break;
+            default:
+                return res.status(400).json({ error: 'Invalid filter. Use daily, weekly, or monthly.' });
+        }
+
+        const records = await PunchRecord.find({
+            userId,
+            date: { $gte: startDate, $lt: endDate },
+        });
+
+        // Use Promise.all to handle async operations in map
+        const report = await Promise.all(records.map(async (record) => {
+            const workHours = calculateWorkHours(record.punchIn, record.punchOut, record.breaks);
+            const requiredHours = await getRequiredHours();
+            return {
+                date: record.date,
+                punchIn: record.punchIn,
+                punchOut: record.punchOut,
+                breaks: record.breaks,
+                totalWorkHours: workHours.total,
+                isLessHours: workHours.total < requiredHours,
+            };
+        }));
+
+        res.status(200).json({ report });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const calculateRemainingHour = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const today = new Date(new Date().toISOString().split('T')[0]);
+        const record = await PunchRecord.findOne({ userId, date: today });
+
+        if (!record || !record.punchIn) {
+            return res.status(200).json({ remainingHours: await getRequiredHours() });
+        }
+
+        const workHours = calculateWorkHours(record.punchIn, record.punchOut || new Date(), record.breaks);
+        const requiredHours = await getRequiredHours();
+        const remainingHours = Math.max(0, requiredHours - workHours.total);
+
+        res.status(200).json({ remainingHours });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+module.exports = {
+    getAttendance,
+    recordAction,
+    getUserStatus,
+    getAttendanceRecord,
+    getReport,
+    calculateRemainingHour,
+};
